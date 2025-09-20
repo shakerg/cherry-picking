@@ -9,3 +9,10 @@ variable "resource_group_name" {
   type        = string
   default     = "rg-cherry-pick"
 }
+
+variable "vm_name" {
+  description = "Name of the virtual machine"
+  type        = string
+  default     = "vm-cherry"
+}
+
