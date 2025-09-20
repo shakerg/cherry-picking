@@ -1,0 +1,28 @@
+{
+  "name": "cherry-picking",
+  "version": "1.0.0",
+  "description": "This folder contains two small Node.js scripts that use Octokit to apply commits (or their diffs) onto another branch. They are intended for testing and demonstration only.",
+  "main": "cherry-core.js",
+  "type": "module",
+  "scripts": {
+    "cherry:core": "node cherry-core.js --help || true",
+    "cherry:diff:dry": "node cherry-with-diffs.js --dry-run",
+    "cherry:diff": "node cherry-with-diffs.js",
+    "lint": "echo 'No lint configured'",
+    "test": "echo \"No tests defined\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com//shakerg/cherry-picking.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.1.2",
+    "diff": "^5.2.0"
+  }
+}

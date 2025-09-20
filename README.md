@@ -3,7 +3,7 @@
 This folder contains two small Node.js scripts that use Octokit to apply commits (or their diffs) onto another branch. They are intended for testing and demonstration only.
 
 **Prerequisites**
-- **Node**: Install Node.js (14+ recommended).
+- **Node**: Install Node.js.
 - **Token**: Set `GITHUB_TOKEN` with repo write permissions.
 - **Dependencies**: Install packages used by the scripts.
 

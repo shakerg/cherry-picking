@@ -10,9 +10,9 @@
 
 
 import { Octokit } from "@octokit/rest";
-import diff from "diff";
+import { applyPatch } from "diff";
 
-// Basic CLI arg parsing (supports: --owner, --repo, --source, --target, --dry-run)
+// Basic CLI arg parsing (supports: --owner, --repo, --source, --target, --dry-run, --conflicts-dir)
 const args = process.argv.slice(2);
 function getArg(name, defaultValue = undefined) {
   const flagIndex = args.findIndex(a => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -25,6 +25,7 @@ function getArg(name, defaultValue = undefined) {
 }
 
 const dryRun = getArg("dry-run", false) !== false; // present => true; absent => false
+const conflictsDir = getArg("conflicts-dir", ".cherry-conflicts");
 const owner = getArg("owner", "your-username");
 const repo = getArg("repo", "your-repo");
 const sourceCommitSha = getArg("source", "abc123");
@@ -64,6 +65,14 @@ async function cherryPickWithDiffs() {
   const filesChanged = sourceCommit.files || [];
   const newTreeItems = [];
   const previewReport = [];
+  const conflicts = [];
+
+  // Prepare conflict output dir lazily
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const ensureConflictsDir = () => {
+    if (!fs.existsSync(conflictsDir)) fs.mkdirSync(conflictsDir, { recursive: true });
+  };
 
   for (const file of filesChanged) {
     if (file.status === "removed") {
@@ -85,10 +94,17 @@ async function cherryPickWithDiffs() {
     } catch (err) {
     }
 
-  const patchedContent = diff.applyPatch(baseContent, file.patch);
+    const patchedContent = applyPatch(baseContent, file.patch);
 
     if (patchedContent === false) {
-      throw new Error(`Conflict while applying patch for ${file.filename}`);
+      conflicts.push({ file: file.filename, reason: 'patch rejected' });
+      if (dryRun) {
+        // Save artifacts for inspection
+        ensureConflictsDir();
+        fs.writeFileSync(path.join(conflictsDir, file.filename.replace(/\//g, '__') + '.base'), baseContent, 'utf8');
+        fs.writeFileSync(path.join(conflictsDir, file.filename.replace(/\//g, '__') + '.patch'), file.patch || '', 'utf8');
+      }
+      continue; // skip adding this file
     }
 
     previewReport.push({
@@ -122,10 +138,19 @@ async function cherryPickWithDiffs() {
     console.log(`Source commit: ${sourceCommitSha}`);
     console.table(previewReport);
     console.log(`Files to update: ${previewReport.length}`);
+    if (conflicts.length) {
+      console.log(`Conflicts (${conflicts.length}) encountered:`);
+      console.table(conflicts);
+      console.log(`Conflict artifacts directory: ${conflictsDir}`);
+    }
     console.log("Re-run without --dry-run to apply.");
     return;
   }
 
+  if (conflicts.length) {
+    console.error(`Aborting apply due to ${conflicts.length} conflict(s). Re-run with --dry-run and resolve manually.`);
+    return;
+  }
   if (newTreeItems.length === 0) {
     console.log("No file changes to apply. Exiting.");
     return;
