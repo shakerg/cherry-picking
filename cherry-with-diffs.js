@@ -10,13 +10,36 @@
 
 
 import { Octokit } from "@octokit/rest";
-import diff from "diff"; // npm install diff
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+import diff from "diff";
 
-const owner = "your-username";
-const repo = "your-repo";
-const sourceCommitSha = "abc123";  // commit to cherry-pick
-const targetBranch = "main";       // target branch
+// Basic CLI arg parsing (supports: --owner, --repo, --source, --target, --dry-run)
+const args = process.argv.slice(2);
+function getArg(name, defaultValue = undefined) {
+  const flagIndex = args.findIndex(a => a === `--${name}` || a.startsWith(`--${name}=`));
+  if (flagIndex === -1) return defaultValue;
+  const exact = args[flagIndex];
+  if (exact.includes("=")) return exact.split("=")[1];
+  const value = args[flagIndex + 1];
+  if (!value || value.startsWith("--")) return true; // boolean style
+  return value;
+}
+
+const dryRun = getArg("dry-run", false) !== false; // present => true; absent => false
+const owner = getArg("owner", "your-username");
+const repo = getArg("repo", "your-repo");
+const sourceCommitSha = getArg("source", "abc123");
+const targetBranch = getArg("target", "main");
+
+if (!process.env.GITHUB_TOKEN) {
+  console.error("Error: GITHUB_TOKEN environment variable is required.");
+  process.exit(1);
+}
+
+if (!sourceCommitSha || sourceCommitSha === "abc123") {
+  console.error("Warning: source commit SHA looks like a placeholder. Provide --source <sha>.");
+}
+
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 async function cherryPickWithDiffs() {
   const { data: sourceCommit } = await octokit.rest.repos.getCommit({
@@ -40,6 +63,7 @@ async function cherryPickWithDiffs() {
 
   const filesChanged = sourceCommit.files || [];
   const newTreeItems = [];
+  const previewReport = [];
 
   for (const file of filesChanged) {
     if (file.status === "removed") {
@@ -61,25 +85,50 @@ async function cherryPickWithDiffs() {
     } catch (err) {
     }
 
-    const patchedContent = diff.applyPatch(baseContent, file.patch);
+  const patchedContent = diff.applyPatch(baseContent, file.patch);
 
     if (patchedContent === false) {
       throw new Error(`Conflict while applying patch for ${file.filename}`);
     }
 
-    const { data: newBlob } = await octokit.rest.git.createBlob({
-      owner,
-      repo,
-      content: patchedContent,
-      encoding: "utf-8",
+    previewReport.push({
+      file: file.filename,
+      additions: file.additions,
+      deletions: file.deletions,
+      status: file.status,
+      patchLines: (file.patch || '').split('\n').length,
     });
 
-    newTreeItems.push({
-      path: file.filename,
-      mode: "100644",
-      type: "blob",
-      sha: newBlob.sha,
-    });
+    if (!dryRun) {
+      const { data: newBlob } = await octokit.rest.git.createBlob({
+        owner,
+        repo,
+        content: patchedContent,
+        encoding: "utf-8",
+      });
+
+      newTreeItems.push({
+        path: file.filename,
+        mode: "100644",
+        type: "blob",
+        sha: newBlob.sha,
+      });
+    }
+  }
+  // Dry-run: print summary and exit
+  if (dryRun) {
+    console.log("--- DRY RUN (no changes pushed) ---");
+    console.log(`Target branch head: ${targetHeadSha}`);
+    console.log(`Source commit: ${sourceCommitSha}`);
+    console.table(previewReport);
+    console.log(`Files to update: ${previewReport.length}`);
+    console.log("Re-run without --dry-run to apply.");
+    return;
+  }
+
+  if (newTreeItems.length === 0) {
+    console.log("No file changes to apply. Exiting.");
+    return;
   }
 
   const { data: newTree } = await octokit.rest.git.createTree({

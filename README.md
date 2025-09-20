@@ -24,7 +24,7 @@ export GITHUB_TOKEN="ghp_xxx..."
 
 Script overview
 - `cherry-core.js`: creates a new commit on the target branch that reuses the tree of a source commit, effectively attaching the source commit's tree to the target branch head. This is a very simple approach and does not apply diffs or handle conflicts.
-- `cherry-with-diffs.js`: fetches the files changed by the source commit, applies the patch hunks to the target branch's current file contents, creates new blobs for the patched files, creates a new tree and commit on the target branch. This attempts to apply diffs and will throw an error on conflicts.
+- `cherry-with-diffs.js`: fetches the files changed by the source commit, applies the patch hunks to the target branch's current file contents, creates new blobs for the patched files, creates a new tree and commit on the target branch. This attempts to apply diffs and will throw an error on conflicts. Supports `--dry-run`.
 
 How to use
 
@@ -45,16 +45,20 @@ node cherry-core.js
 # On success you'll see the new commit SHA printed.
 ```
 
-Example: run the diff-based cherry-pick
+Example: run the diff-based cherry-pick (dry run first)
 
 ```
 export GITHUB_TOKEN="..."
-node cherry-with-diffs.js
+# Dry run preview (no ref update)
+node cherry-with-diffs.js --owner your-org --repo your-repo --source <commit-sha> --target main --dry-run
+
+# Apply for real
+node cherry-with-diffs.js --owner your-org --repo your-repo --source <commit-sha> --target main
 ```
 
 Notes & warnings
 - **Permissions**: The token needs `repo` write permissions to create commits and update refs.
-- **Conflicts**: `cherry-with-diffs.js` will throw an error if a patch cannot be applied cleanly. The scripts do not perform interactive merges or conflict resolution.
+- **Conflicts**: `cherry-with-diffs.js` will throw an error if a patch cannot be applied cleanly. Use `--dry-run` first to inspect changes. The scripts do not perform interactive merges or conflict resolution.
 - **Testing**: Test in a fork or an isolated test branch before running against important branches.
 - **Safety**: These scripts update git refs on GitHub directly. Consider making a backup branch or creating a PR instead of updating protected branches.
 - **Rate limits & errors**: GitHub API rate limits and transient errors can occur — retry if necessary and inspect error messages.
