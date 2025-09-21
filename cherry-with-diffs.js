@@ -20,7 +20,7 @@ function getArg(name, defaultValue = undefined) {
   const exact = args[flagIndex];
   if (exact.includes("=")) return exact.split("=")[1];
   const value = args[flagIndex + 1];
-  if (!value || value.startsWith("--")) return true; // boolean style
+  if (!value || value.startsWith("--")) return true;
   return value;
 }
 
@@ -66,8 +66,6 @@ async function cherryPickWithDiffs() {
   const newTreeItems = [];
   const previewReport = [];
   const conflicts = [];
-
-  // Prepare conflict output dir lazily
   const fs = await import('node:fs');
   const path = await import('node:path');
   const ensureConflictsDir = () => {
@@ -99,7 +97,6 @@ async function cherryPickWithDiffs() {
     if (patchedContent === false) {
       conflicts.push({ file: file.filename, reason: 'patch rejected' });
       if (dryRun) {
-        // Save artifacts for inspection
         ensureConflictsDir();
         fs.writeFileSync(path.join(conflictsDir, file.filename.replace(/\//g, '__') + '.base'), baseContent, 'utf8');
         fs.writeFileSync(path.join(conflictsDir, file.filename.replace(/\//g, '__') + '.patch'), file.patch || '', 'utf8');
@@ -131,7 +128,6 @@ async function cherryPickWithDiffs() {
       });
     }
   }
-  // Dry-run: print summary and exit
   if (dryRun) {
     console.log("--- DRY RUN (no changes pushed) ---");
     console.log(`Target branch head: ${targetHeadSha}`);
