@@ -13,12 +13,34 @@
 
 
 import { Octokit } from "@octokit/rest";
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
-const owner = "your-username";
-const repo = "your-repo";
-const sourceCommitSha = "abc123";   // commit you want to "cherry-pick"
-const targetBranch = "main";        // branch you want to apply commit to
+// Basic CLI arg parsing similar to cherry-with-diffs.js
+const args = process.argv.slice(2);
+function getArg(name, defaultValue = undefined) {
+  const idx = args.findIndex(a => a === `--${name}` || a.startsWith(`--${name}=`));
+  if (idx === -1) return defaultValue;
+  const token = args[idx];
+  if (token.includes('=')) return token.split('=')[1];
+  const next = args[idx + 1];
+  if (!next || next.startsWith('--')) return true;
+  return next;
+}
+
+const dryRun = getArg('dry-run', false) !== false; // presence => true
+const owner = getArg('owner', 'your-username');
+const repo = getArg('repo', 'your-repo');
+const sourceCommitSha = getArg('source', 'abc123'); // commit to cherry-pick
+const targetBranch = getArg('target', 'main');      // branch to apply commit to
+
+if (!process.env.GITHUB_TOKEN) {
+  console.error('Error: GITHUB_TOKEN environment variable is required.');
+  process.exit(1);
+}
+if (sourceCommitSha === 'abc123') {
+  console.error('Warning: source commit SHA looks like a placeholder. Provide --source <sha>.');
+}
+
+const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 async function cherryPickLike() {
   const { data: sourceCommit } = await octokit.rest.git.getCommit({
@@ -40,12 +62,26 @@ async function cherryPickLike() {
     commit_sha: targetHeadSha,
   });
 
+  if (dryRun) {
+    console.log('--- DRY RUN (no commit created) ---');
+    console.log(`Target branch head: ${targetHeadSha}`);
+    console.log(`Source commit: ${sourceCommitSha}`);
+    console.log('Commit that WOULD be created:');
+    console.log({
+      message: `Cherry-pick: ${sourceCommit.message}`,
+      tree: sourceCommit.tree.sha,
+      parents: [targetHeadSha]
+    });
+    console.log('Re-run without --dry-run to apply.');
+    return;
+  }
+
   const { data: newCommit } = await octokit.rest.git.createCommit({
     owner,
     repo,
     message: `Cherry-pick: ${sourceCommit.message}`,
     tree: sourceCommit.tree.sha,
-    parents: [targetHeadSha], // new parent!
+    parents: [targetHeadSha],
   });
 
   await octokit.rest.git.updateRef({
